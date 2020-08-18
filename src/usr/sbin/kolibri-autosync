@@ -1,0 +1,3 @@
+#!/bin/bash
+. /etc/default/kolibri
+su - $KOLIBRI_USER -c "/usr/sbin/kolibri-autosync.py"&

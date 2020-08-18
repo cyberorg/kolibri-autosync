@@ -1,0 +1,11 @@
+[Unit]
+Description=Kolibri autosync
+After=kilibri-server.service
+
+[Service]
+Type=forking
+ExecStart=/usr/sbin/kolibri-autosync
+ExecStop=killall kolibri-autosync.py
+
+[Install]
+WantedBy=multi-user.target
