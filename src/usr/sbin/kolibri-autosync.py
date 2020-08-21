@@ -1,22 +1,25 @@
 #!/usr/bin/python3
-# MSS Cloud sync for primary facility on user device
+# MSS Cloud sync for multifacilities on user device
+import logging
+import threading
+import os
+import sys
+from kolibri.utils.cli import main
+
+def facility_sync(syncdelay, syncserver, syncuser, syncpass, syncfacilityid):
+    pid = os.fork()
+    if pid == 0:
+        main(["manage", "sync", "--baseurl", syncserver, "--username", syncuser, "--password", syncpass, "--facility", syncfacilityid, "--verbosity", "3"])
+    else:
+        os.waitpid(pid, 0)
+
 def run_sync():
-    import os
-    import sys
-    import threading
     f = open(os.devnull, 'w')
     sys.stdout = f
-    import logging
+#    logging.basicConfig(level=logging.INFO)
     logging.disable(logging.INFO)
     logging.disable(logging.WARNING)
-    from kolibri.utils.cli import main
     from configparser import ConfigParser
-    from django.core.management import execute_from_command_line
-
-    execute_from_command_line(sys.argv)
-
-    from kolibri.core.auth.models import Facility
-
     KOLIBRI_HOME = os.environ.get("KOLIBRI_HOME")
     syncini_file = os.path.join(KOLIBRI_HOME, "syncoptions.ini")
     configur = ConfigParser()
@@ -34,17 +37,33 @@ def run_sync():
         return
 
     configur.read(syncini_file)
-    syncuser = configur.get('DEFAULT', 'SYNC_USER')
+
     syncon = configur.getboolean('DEFAULT', 'SYNC_ON')
 
     if (syncon):
-        syncfacility = Facility.get_default_facility()
+        from django.core.management import execute_from_command_line
 
-        if (syncfacility is not None):
-            syncfacilityid = syncfacility.id
-            syncpass = "sync" + syncfacilityid
-            syncserver = configur.get('DEFAULT', 'SYNC_SERVER')
-            syncdelay = configur.getfloat('DEFAULT', 'SYNC_DELAY')
-            threading.Timer(syncdelay, run_sync).start()
-            main(["manage", "sync", "--baseurl", syncserver, "--username", syncuser, "--password", syncpass, "--facility", syncfacilityid, "--verbosity", "3"])
+        execute_from_command_line(sys.argv)
+
+        from kolibri.core.auth.models import Facility
+        syncfacilities = Facility.objects.filter()
+        syncuser = configur.get('DEFAULT', 'SYNC_USER')
+        syncdelay = configur.getfloat('DEFAULT', 'SYNC_DELAY')
+        syncserver = configur.get('DEFAULT', 'SYNC_SERVER')
+
+        if syncfacilities:
+            for syncfacility in syncfacilities:
+                syncfacilityid = syncfacility.id
+                syncpass = "sync" + syncfacilityid
+
+                if syncfacilityid in configur:
+                    syncuser = configur.get(syncfacilityid, 'SYNC_USER')
+                    syncpass = configur.get(syncfacilityid, 'SYNC_PASS')
+                    syncdelay = configur.getfloat(syncfacilityid, 'SYNC_DELAY')
+                    syncserver = configur.get(syncfacilityid, 'SYNC_SERVER')
+
+                facility_sync(syncdelay, syncserver, syncuser, syncpass, syncfacilityid)
+
+    threading.Timer(syncdelay, run_sync).start()
+
 run_sync()
